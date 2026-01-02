@@ -1,0 +1,8 @@
+{
+  "name": "Copy of Dental X-Ray Navigator",
+  "description": "A professional dental X-ray request and management application designed for iPads and PCs. Features an interactive dental chart, insurance point calculation, and daily analytics.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
