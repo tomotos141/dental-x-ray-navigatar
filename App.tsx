@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  PlusCircle, LayoutDashboard, History, User, FileText, Save, Trash2, ListTodo, 
+import {
+  PlusCircle, LayoutDashboard, History, User, FileText, Save, Trash2, ListTodo,
   MapPin, X, Zap, Search, ClipboardCheck, Users, Settings, UserPlus, Info,
   Cake, UserRound, ArrowRight, CheckCircle2, Database, Calendar as CalendarIcon, AlertTriangle
 } from 'lucide-react';
@@ -9,6 +9,7 @@ import { XrayRequest, XrayType, RadiationLog, ClinicAuth, Patient, Operator, Sta
 import { INSURANCE_POINTS, XRAY_LABELS, LOCATION_OPTIONS, EXPOSURE_TEMPLATES } from './constants';
 import DentalChart from './components/DentalChart';
 import StatsDashboard from './components/StatsDashboard';
+import { useDentalData } from './hooks/useDentalData';
 
 const calculateAge = (birthdayStr: string, baseDateStr: string = new Date().toISOString().split('T')[0]): number => {
   if (!birthdayStr) return 0;
@@ -27,33 +28,27 @@ const getAgeCategory = (age: number): AgeCategory => age < 12 ? 'child' : 'adult
 const App: React.FC = () => {
   const [auth, setAuth] = useState<ClinicAuth | null>(null);
   const [view, setView] = useState<'request' | 'tasks' | 'stats' | 'history' | 'patients'>('request');
-  const [requests, setRequests] = useState<XrayRequest[]>([]);
-  const [patients, setPatients] = useState<Patient[]>([]);
+  const { patients, requests, loading, savePatient, deletePatient: deletePatientDb, addRequest, updateRequest } = useDentalData();
   const [operators, setOperators] = useState<Operator[]>([]);
-  
+
   const [loginClinicId, setLoginClinicId] = useState('');
   const [loginStaffName, setLoginStaffName] = useState('');
   const [logModalTask, setLogModalTask] = useState<XrayRequest | null>(null);
   const [tempLogs, setTempLogs] = useState<Partial<Record<XrayType, RadiationLog>>>({});
-  
+
   const [deleteConfirmPatient, setDeleteConfirmPatient] = useState<Patient | null>(null);
 
   const pendingCount = useMemo(() => requests.filter(r => r.status === 'pending').length, [requests]);
 
+  // Keep operators local for now
   useEffect(() => {
-    const savedReqs = localStorage.getItem(`dentx_reqs_global`);
-    const savedPatients = localStorage.getItem(`dentx_patients_global`);
     const savedOperators = localStorage.getItem(`dentx_operators_global`);
-    if (savedReqs) setRequests(JSON.parse(savedReqs).map((r: any) => ({ ...r, timestamp: new Date(r.timestamp) })));
-    if (savedPatients) setPatients(JSON.parse(savedPatients));
     if (savedOperators) setOperators(JSON.parse(savedOperators));
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(`dentx_reqs_global`, JSON.stringify(requests));
-    localStorage.setItem(`dentx_patients_global`, JSON.stringify(patients));
     localStorage.setItem(`dentx_operators_global`, JSON.stringify(operators));
-  }, [requests, patients, operators]);
+  }, [operators]);
 
   const [patientId, setPatientId] = useState('');
   const [patientName, setPatientName] = useState('');
@@ -120,17 +115,18 @@ const App: React.FC = () => {
     setBitewingSides(prev => prev.includes(side) ? prev.filter(s => s !== side) : [...prev, side]);
   };
 
-  const handleSaveRequest = () => {
+  const handleSaveRequest = async () => {
     if (!patientName || !patientId || !patientBirthday) return alert('患者情報を正しく入力してください');
     if (selectedXrayTypes.length === 0) return alert('撮影種別を選択してください');
     if (selectedXrayTypes.includes('BITEWING') && bitewingSides.length === 0) return alert('バイトウィングの撮影側（右・左）を選択してください');
-    
-    const existingPatientIndex = patients.findIndex(p => p.id === patientId);
-    if (existingPatientIndex === -1) {
-      setPatients(prev => [...prev, { id: patientId, name: patientName, gender: patientGender, birthday: patientBirthday, bodyType: patientBodyType }]);
-    } else {
-      setPatients(prev => prev.map(p => p.id === patientId ? { ...p, name: patientName, gender: patientGender, birthday: patientBirthday, bodyType: patientBodyType } : p));
-    }
+
+    await savePatient({
+      id: patientId,
+      name: patientName,
+      gender: patientGender,
+      birthday: patientBirthday,
+      bodyType: patientBodyType
+    });
 
     const requestData: XrayRequest = {
       id: Math.random().toString(36).substr(2, 9),
@@ -140,7 +136,7 @@ const App: React.FC = () => {
       timestamp: new Date(), status: 'pending', radiationLogs: {}
     };
 
-    setRequests(prev => [requestData, ...prev]);
+    await addRequest(requestData);
     setView('tasks');
     resetForm();
   };
@@ -156,9 +152,9 @@ const App: React.FC = () => {
     setDeleteConfirmPatient(patient);
   };
 
-  const confirmDeletePatient = () => {
+  const confirmDeletePatient = async () => {
     if (!deleteConfirmPatient) return;
-    setPatients(prev => prev.filter(p => p.id !== deleteConfirmPatient.id));
+    await deletePatientDb(deleteConfirmPatient.id);
     setDeleteConfirmPatient(null);
   };
 
@@ -166,7 +162,7 @@ const App: React.FC = () => {
     setLogModalTask(task);
     const initialLogs: Partial<Record<XrayType, RadiationLog>> = {};
     const ageCat = getAgeCategory(task.patientAgeAtRequest);
-    
+
     task.types.forEach(type => {
       const template = EXPOSURE_TEMPLATES[type][ageCat][task.patientBodyType];
       initialLogs[type] = {
@@ -177,9 +173,9 @@ const App: React.FC = () => {
     setTempLogs(initialLogs);
   };
 
-  const saveAllLogs = () => {
+  const saveAllLogs = async () => {
     if (!logModalTask) return;
-    setRequests(prev => prev.map(r => r.id === logModalTask.id ? { ...r, status: 'completed', radiationLogs: tempLogs } : r));
+    await updateRequest({ ...logModalTask, status: 'completed', radiationLogs: tempLogs });
     setLogModalTask(null);
   };
 
@@ -194,11 +190,11 @@ const App: React.FC = () => {
           </div>
         </div>
         <nav className="flex gap-1 bg-slate-100 p-1 rounded-2xl overflow-x-auto no-scrollbar">
-          <button onClick={() => setView('request')} className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 ${view === 'request' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><PlusCircle size={14}/><span>新規依頼</span></button>
-          <button onClick={() => setView('tasks')} className={`px-4 py-2 rounded-xl text-xs font-bold relative ${view === 'tasks' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><ListTodo size={14}/><span>タスク</span>{pendingCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-black">{pendingCount}</span>}</button>
-          <button onClick={() => setView('stats')} className={`px-4 py-2 rounded-xl text-xs font-bold ${view === 'stats' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><LayoutDashboard size={14}/><span>実績</span></button>
-          <button onClick={() => setView('history')} className={`px-4 py-2 rounded-xl text-xs font-bold ${view === 'history' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><History size={14}/><span>履歴</span></button>
-          <button onClick={() => setView('patients')} className={`px-4 py-2 rounded-xl text-xs font-bold ${view === 'patients' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Users size={14}/><span>患者管理</span></button>
+          <button onClick={() => setView('request')} className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 ${view === 'request' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><PlusCircle size={14} /><span>新規依頼</span></button>
+          <button onClick={() => setView('tasks')} className={`px-4 py-2 rounded-xl text-xs font-bold relative ${view === 'tasks' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><ListTodo size={14} /><span>タスク</span>{pendingCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-black">{pendingCount}</span>}</button>
+          <button onClick={() => setView('stats')} className={`px-4 py-2 rounded-xl text-xs font-bold ${view === 'stats' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><LayoutDashboard size={14} /><span>実績</span></button>
+          <button onClick={() => setView('history')} className={`px-4 py-2 rounded-xl text-xs font-bold ${view === 'history' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><History size={14} /><span>履歴</span></button>
+          <button onClick={() => setView('patients')} className={`px-4 py-2 rounded-xl text-xs font-bold ${view === 'patients' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Users size={14} /><span>患者管理</span></button>
         </nav>
       </header>
 
@@ -206,9 +202,9 @@ const App: React.FC = () => {
         {!auth ? (
           <div className="max-w-md mx-auto mt-20 bg-white p-10 rounded-[40px] shadow-2xl space-y-8 animate-in zoom-in duration-500">
             <div className="text-center">
-               <div className="w-20 h-20 bg-blue-600 rounded-3xl mx-auto mb-6 flex items-center justify-center shadow-2xl shadow-blue-100"><Zap className="text-white fill-current" size={40} /></div>
-               <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">DentX Navigator</h2>
-               <p className="text-slate-400 font-bold text-xs mt-2 uppercase tracking-widest">Digital Imaging Management</p>
+              <div className="w-20 h-20 bg-blue-600 rounded-3xl mx-auto mb-6 flex items-center justify-center shadow-2xl shadow-blue-100"><Zap className="text-white fill-current" size={40} /></div>
+              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">DentX Navigator</h2>
+              <p className="text-slate-400 font-bold text-xs mt-2 uppercase tracking-widest">Digital Imaging Management</p>
             </div>
             <div className="space-y-4">
               <input type="text" placeholder="医院 ID" value={loginClinicId} onChange={e => setLoginClinicId(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold focus:ring-2 focus:ring-blue-500" />
@@ -233,30 +229,30 @@ const App: React.FC = () => {
                     <div className="space-y-4">
                       <div className="relative">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                        <input 
-                          type="text" 
-                          placeholder="患者 ID" 
-                          value={patientId} 
-                          onChange={e => handlePatientIdChange(e.target.value)} 
-                          className="w-full pl-11 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all" 
+                        <input
+                          type="text"
+                          placeholder="患者 ID"
+                          value={patientId}
+                          onChange={e => handlePatientIdChange(e.target.value)}
+                          className="w-full pl-11 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all"
                         />
                       </div>
-                      <input 
-                        type="text" 
-                        placeholder="患者氏名" 
-                        value={patientName} 
-                        onChange={e => setPatientName(e.target.value)} 
-                        className={`w-full px-4 py-4 border border-slate-200 rounded-2xl font-bold outline-none focus:bg-white transition-all ${isFoundInDb ? 'bg-slate-50 cursor-not-allowed opacity-80' : 'bg-slate-50'}`} 
+                      <input
+                        type="text"
+                        placeholder="患者氏名"
+                        value={patientName}
+                        onChange={e => setPatientName(e.target.value)}
+                        className={`w-full px-4 py-4 border border-slate-200 rounded-2xl font-bold outline-none focus:bg-white transition-all ${isFoundInDb ? 'bg-slate-50 cursor-not-allowed opacity-80' : 'bg-slate-50'}`}
                       />
-                      
+
                       <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-400 ml-1 uppercase flex items-center gap-1"><Cake size={10} /> 生年月日 & 年齢</label>
                         <div className="flex gap-2">
-                          <input 
-                            type="date" 
-                            value={patientBirthday} 
-                            onChange={e => setPatientBirthday(e.target.value)} 
-                            className={`flex-1 px-4 py-3 border border-slate-200 rounded-xl font-bold outline-none text-xs ${isFoundInDb ? 'bg-slate-50 opacity-80' : 'bg-slate-50'}`} 
+                          <input
+                            type="date"
+                            value={patientBirthday}
+                            onChange={e => setPatientBirthday(e.target.value)}
+                            className={`flex-1 px-4 py-3 border border-slate-200 rounded-xl font-bold outline-none text-xs ${isFoundInDb ? 'bg-slate-50 opacity-80' : 'bg-slate-50'}`}
                           />
                           <div className={`px-4 py-3 rounded-xl flex items-center justify-center font-black min-w-[80px] text-xs ${ageCategory === 'child' ? 'bg-amber-100 text-amber-700' : 'bg-blue-50 text-blue-600'}`}>
                             {currentAge}歳 ({ageCategory === 'child' ? '小児' : '成人'})
@@ -280,27 +276,27 @@ const App: React.FC = () => {
                   <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-5">
                     <h2 className="text-lg font-black text-slate-900 flex items-center gap-3"><FileText className="text-blue-500" size={20} /> 撮影種別</h2>
                     <div className="grid grid-cols-1 gap-2">
-                       {(Object.keys(XRAY_LABELS) as XrayType[]).map(type => (
-                         <div key={type} className="flex flex-col gap-2">
-                           <button onClick={() => setSelectedXrayTypes(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type])} className={`w-full text-left px-4 py-3 rounded-xl border font-bold transition-all flex justify-between items-center ${selectedXrayTypes.includes(type) ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-white'}`}>
-                             <span className="text-sm">{XRAY_LABELS[type]}</span>
-                             <div className="flex flex-col items-end">
-                               <span className="text-[10px] font-black leading-none">{INSURANCE_POINTS[type].basePoints}点</span>
-                               <span className={`text-[8px] font-bold mt-1 ${selectedXrayTypes.includes(type) ? 'text-blue-200' : 'text-slate-400'}`}>
-                                 [{EXPOSURE_TEMPLATES[type][ageCategory][patientBodyType].kv}kV]
-                               </span>
-                             </div>
-                           </button>
-                           
-                           {/* バイトウィング左右選択UI */}
-                           {type === 'BITEWING' && selectedXrayTypes.includes('BITEWING') && (
-                             <div className="grid grid-cols-2 gap-2 animate-in slide-in-from-top-2 duration-300 px-1 mb-2">
-                               <button onClick={() => toggleBitewingSide('right')} className={`py-2 rounded-lg text-[10px] font-black border transition-all ${bitewingSides.includes('right') ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-400 border-slate-200'}`}>右側 (R)</button>
-                               <button onClick={() => toggleBitewingSide('left')} className={`py-2 rounded-lg text-[10px] font-black border transition-all ${bitewingSides.includes('left') ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-400 border-slate-200'}`}>左側 (L)</button>
-                             </div>
-                           )}
-                         </div>
-                       ))}
+                      {(Object.keys(XRAY_LABELS) as XrayType[]).map(type => (
+                        <div key={type} className="flex flex-col gap-2">
+                          <button onClick={() => setSelectedXrayTypes(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type])} className={`w-full text-left px-4 py-3 rounded-xl border font-bold transition-all flex justify-between items-center ${selectedXrayTypes.includes(type) ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-white'}`}>
+                            <span className="text-sm">{XRAY_LABELS[type]}</span>
+                            <div className="flex flex-col items-end">
+                              <span className="text-[10px] font-black leading-none">{INSURANCE_POINTS[type].basePoints}点</span>
+                              <span className={`text-[8px] font-bold mt-1 ${selectedXrayTypes.includes(type) ? 'text-blue-200' : 'text-slate-400'}`}>
+                                [{EXPOSURE_TEMPLATES[type][ageCategory][patientBodyType].kv}kV]
+                              </span>
+                            </div>
+                          </button>
+
+                          {/* バイトウィング左右選択UI */}
+                          {type === 'BITEWING' && selectedXrayTypes.includes('BITEWING') && (
+                            <div className="grid grid-cols-2 gap-2 animate-in slide-in-from-top-2 duration-300 px-1 mb-2">
+                              <button onClick={() => toggleBitewingSide('right')} className={`py-2 rounded-lg text-[10px] font-black border transition-all ${bitewingSides.includes('right') ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-400 border-slate-200'}`}>右側 (R)</button>
+                              <button onClick={() => toggleBitewingSide('left')} className={`py-2 rounded-lg text-[10px] font-black border transition-all ${bitewingSides.includes('left') ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-400 border-slate-200'}`}>左側 (L)</button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </section>
                 </div>
@@ -312,9 +308,9 @@ const App: React.FC = () => {
                       <div className="text-blue-600 font-black text-xl tabular-nums">{currentPoints} <span className="text-xs">点</span></div>
                     </div>
                     {needsToothSelection ? (
-                      <DentalChart 
-                        selectedTeeth={selectedTeeth} 
-                        onToggleTooth={id => setSelectedTeeth(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id])} 
+                      <DentalChart
+                        selectedTeeth={selectedTeeth}
+                        onToggleTooth={id => setSelectedTeeth(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id])}
                         onToggleTeethRange={handleToggleTeethRange}
                       />
                     ) : (
@@ -325,7 +321,7 @@ const App: React.FC = () => {
                       </div>
                     )}
                   </section>
-                  
+
                   <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col gap-6">
                     <h2 className="text-sm font-black text-slate-700 flex items-center gap-2 px-2"><CalendarIcon size={16} className="text-blue-500" /> 撮影予約設定</h2>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -344,7 +340,7 @@ const App: React.FC = () => {
                         <input type="time" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500" />
                       </div>
                     </div>
-                    <button onClick={handleSaveRequest} className="w-full bg-blue-600 text-white px-12 py-5 rounded-2xl font-black shadow-lg hover:shadow-blue-200 active:scale-95 transition-all flex items-center justify-center gap-3 text-lg mt-2"><Save size={24}/>撮影依頼を送信</button>
+                    <button onClick={handleSaveRequest} className="w-full bg-blue-600 text-white px-12 py-5 rounded-2xl font-black shadow-lg hover:shadow-blue-200 active:scale-95 transition-all flex items-center justify-center gap-3 text-lg mt-2"><Save size={24} />撮影依頼を送信</button>
                   </section>
                 </div>
               </div>
@@ -366,21 +362,21 @@ const App: React.FC = () => {
                       <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest font-mono">患者ID: {task.patientId}</p>
                     </div>
                     <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 space-y-4">
-                       <div className="flex flex-wrap gap-2">
-                         {task.types.map(t => (
-                           <span key={t} className="bg-white text-blue-600 px-4 py-2 rounded-full text-[10px] font-black border border-blue-100 shadow-sm">
-                             {XRAY_LABELS[t]}
-                             {t === 'BITEWING' && task.bitewingSides && ` (${task.bitewingSides.map(s => s === 'right' ? '右' : '左').join('・')})`}
-                           </span>
-                         ))}
-                       </div>
-                       {task.selectedTeeth.length > 0 && (
-                         <div className="flex flex-wrap gap-1.5 pt-2 border-t border-slate-200">
-                           {task.selectedTeeth.sort((a,b) => a-b).map(t => <span key={t} className="text-[10px] font-black text-slate-500 px-2 py-1 bg-white rounded-lg border border-slate-200">{t}</span>)}
-                         </div>
-                       )}
+                      <div className="flex flex-wrap gap-2">
+                        {task.types.map(t => (
+                          <span key={t} className="bg-white text-blue-600 px-4 py-2 rounded-full text-[10px] font-black border border-blue-100 shadow-sm">
+                            {XRAY_LABELS[t]}
+                            {t === 'BITEWING' && task.bitewingSides && ` (${task.bitewingSides.map(s => s === 'right' ? '右' : '左').join('・')})`}
+                          </span>
+                        ))}
+                      </div>
+                      {task.selectedTeeth.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-2 border-t border-slate-200">
+                          {task.selectedTeeth.sort((a, b) => a - b).map(t => <span key={t} className="text-[10px] font-black text-slate-500 px-2 py-1 bg-white rounded-lg border border-slate-200">{t}</span>)}
+                        </div>
+                      )}
                     </div>
-                    <button onClick={() => openLogModal(task)} className="w-full bg-blue-600 text-white py-6 rounded-3xl font-black text-lg shadow-xl hover:bg-blue-700 transition-all active:scale-95 flex items-center justify-center gap-3"><ClipboardCheck size={24}/>撮影完了・照射録記録</button>
+                    <button onClick={() => openLogModal(task)} className="w-full bg-blue-600 text-white py-6 rounded-3xl font-black text-lg shadow-xl hover:bg-blue-700 transition-all active:scale-95 flex items-center justify-center gap-3"><ClipboardCheck size={24} />撮影完了・照射録記録</button>
                   </div>
                 ))}
                 {pendingCount === 0 && (
@@ -479,8 +475,8 @@ const App: React.FC = () => {
                             </span>
                           </td>
                           <td className="px-8 py-5 text-right">
-                            <button 
-                              onClick={() => handleDeletePatient(p)} 
+                            <button
+                              onClick={() => handleDeletePatient(p)}
                               className="p-2 text-slate-300 hover:text-red-500 transition-colors hover:bg-red-50 rounded-xl"
                             >
                               <Trash2 size={20} />
@@ -493,7 +489,7 @@ const App: React.FC = () => {
                 </div>
               </div>
             )}
-            
+
             {view === 'stats' && <StatsDashboard requests={requests} />}
           </>
         )}
@@ -508,18 +504,18 @@ const App: React.FC = () => {
             </div>
             <h3 className="text-xl font-black text-slate-900 mb-2">患者データの削除</h3>
             <p className="text-slate-500 text-sm font-bold leading-relaxed mb-8">
-              <span className="text-slate-900 font-black">「{deleteConfirmPatient.name}」</span> 様の情報をデータベースから完全に削除しますか？<br/>
+              <span className="text-slate-900 font-black">「{deleteConfirmPatient.name}」</span> 様の情報をデータベースから完全に削除しますか？<br />
               この操作は取り消せません。
             </p>
             <div className="grid grid-cols-2 gap-3">
-              <button 
-                onClick={() => setDeleteConfirmPatient(null)} 
+              <button
+                onClick={() => setDeleteConfirmPatient(null)}
                 className="py-4 rounded-2xl bg-slate-100 text-slate-600 font-black text-sm active:scale-95 transition-all"
               >
                 キャンセル
               </button>
-              <button 
-                onClick={confirmDeletePatient} 
+              <button
+                onClick={confirmDeletePatient}
                 className="py-4 rounded-2xl bg-red-600 text-white font-black text-sm shadow-lg shadow-red-200 active:scale-95 transition-all"
               >
                 削除する
@@ -548,15 +544,15 @@ const App: React.FC = () => {
                     {['kv', 'ma', 'sec'].map(field => (
                       <div key={field} className="space-y-2 text-center">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{field}</label>
-                        <input 
-                          type="number" 
-                          step={field === 'sec' ? '0.01' : '1'} 
-                          value={tempLogs[type]?.[field as keyof RadiationLog] || 0} 
+                        <input
+                          type="number"
+                          step={field === 'sec' ? '0.01' : '1'}
+                          value={tempLogs[type]?.[field as keyof RadiationLog] || 0}
                           onChange={e => setTempLogs({
                             ...tempLogs,
                             [type]: { ...tempLogs[type], [field]: Number(e.target.value) }
-                          })} 
-                          className="w-full bg-white border border-slate-200 rounded-2xl px-2 py-4 text-2xl font-black text-blue-600 outline-none text-center shadow-sm focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all" 
+                          })}
+                          className="w-full bg-white border border-slate-200 rounded-2xl px-2 py-4 text-2xl font-black text-blue-600 outline-none text-center shadow-sm focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all"
                         />
                       </div>
                     ))}
@@ -565,12 +561,12 @@ const App: React.FC = () => {
               ))}
               <div className="space-y-2 px-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">署名 (撮影担当者)</label>
-                <input 
-                  type="text" 
-                  value={tempLogs[logModalTask.types[0]]?.operatorName || ''} 
+                <input
+                  type="text"
+                  value={tempLogs[logModalTask.types[0]]?.operatorName || ''}
                   onChange={e => {
                     const newLogs = { ...tempLogs };
-                    logModalTask.types.forEach(t => { if(newLogs[t]) newLogs[t]!.operatorName = e.target.value; });
+                    logModalTask.types.forEach(t => { if (newLogs[t]) newLogs[t]!.operatorName = e.target.value; });
                     setTempLogs(newLogs);
                   }}
                   className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-3xl font-black text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 transition-all"
@@ -579,7 +575,7 @@ const App: React.FC = () => {
               </div>
             </div>
             <div className="p-8 border-t border-slate-100 bg-slate-50 flex-shrink-0">
-              <button onClick={saveAllLogs} className="w-full bg-blue-600 text-white py-6 rounded-[32px] font-black text-xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95 flex items-center justify-center gap-3"><Save size={24}/>撮影記録を確定保存</button>
+              <button onClick={saveAllLogs} className="w-full bg-blue-600 text-white py-6 rounded-[32px] font-black text-xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95 flex items-center justify-center gap-3"><Save size={24} />撮影記録を確定保存</button>
             </div>
           </div>
         </div>
