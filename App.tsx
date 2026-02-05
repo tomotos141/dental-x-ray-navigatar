@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   PlusCircle, LayoutDashboard, History, User, FileText, Save, Trash2, ListTodo,
   MapPin, X, Zap, Search, ClipboardCheck, Users, Settings, UserPlus, Info,
-  Cake, UserRound, ArrowRight, ArrowLeft, CheckCircle2, Database, Calendar as CalendarIcon, AlertTriangle, Filter, Download, Printer, LogOut
+  Cake, UserRound, ArrowRight, ArrowLeft, CheckCircle2, Database, Calendar as CalendarIcon, AlertTriangle, Filter, Download, Printer, LogOut, XCircle, CheckCircle
 } from 'lucide-react';
 import { XrayRequest, XrayType, RadiationLog, ClinicAuth, Patient, Operator, StaffRole, Gender, BodyType, AgeCategory } from './types';
 import { INSURANCE_POINTS, XRAY_LABELS, LOCATION_OPTIONS, EXPOSURE_TEMPLATES } from './constants';
@@ -39,7 +39,7 @@ const App: React.FC = () => {
   });
   const [view, setView] = useState<'request' | 'tasks' | 'stats' | 'history' | 'patients' | 'patient-detail'>('request');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const { patients, requests, loading, savePatient, deletePatient: deletePatientDb, addRequest, updateRequest } = useDentalData();
+  const { patients, requests, loading, toasts, removeToast, savePatient, deletePatient: deletePatientDb, addRequest, updateRequest } = useDentalData();
   const [operators, setOperators] = useState<Operator[]>([]);
 
   const [loginClinicId, setLoginClinicId] = useState('');
@@ -931,6 +931,33 @@ const App: React.FC = () => {
               <button onClick={saveAllLogs} className="w-full bg-blue-600 text-white py-6 rounded-[32px] font-black text-xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95 flex items-center justify-center gap-3"><Save size={24} />撮影記録を確定保存</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Toast通知 */}
+      {toasts.length > 0 && (
+        <div className="fixed bottom-6 right-6 z-[100] space-y-3">
+          {toasts.map(toast => (
+            <div
+              key={toast.id}
+              className={`flex items-center gap-3 px-5 py-4 rounded-2xl shadow-lg animate-in slide-in-from-right-5 duration-300 ${
+                toast.type === 'success' ? 'bg-emerald-600 text-white' :
+                toast.type === 'error' ? 'bg-red-600 text-white' :
+                'bg-slate-800 text-white'
+              }`}
+            >
+              {toast.type === 'success' && <CheckCircle size={20} />}
+              {toast.type === 'error' && <XCircle size={20} />}
+              {toast.type === 'info' && <Info size={20} />}
+              <span className="font-bold text-sm">{toast.message}</span>
+              <button
+                onClick={() => removeToast(toast.id)}
+                className="ml-2 opacity-70 hover:opacity-100 transition-opacity"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>
