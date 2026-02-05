@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   PlusCircle, LayoutDashboard, History, User, FileText, Save, Trash2, ListTodo,
   MapPin, X, Zap, Search, ClipboardCheck, Users, Settings, UserPlus, Info,
-  Cake, UserRound, ArrowRight, ArrowLeft, CheckCircle2, Database, Calendar as CalendarIcon, AlertTriangle
+  Cake, UserRound, ArrowRight, ArrowLeft, CheckCircle2, Database, Calendar as CalendarIcon, AlertTriangle, Filter
 } from 'lucide-react';
 import { XrayRequest, XrayType, RadiationLog, ClinicAuth, Patient, Operator, StaffRole, Gender, BodyType, AgeCategory } from './types';
 import { INSURANCE_POINTS, XRAY_LABELS, LOCATION_OPTIONS, EXPOSURE_TEMPLATES } from './constants';
@@ -39,7 +39,37 @@ const App: React.FC = () => {
 
   const [deleteConfirmPatient, setDeleteConfirmPatient] = useState<Patient | null>(null);
 
+  // 履歴検索フィルタ
+  const [historySearchText, setHistorySearchText] = useState('');
+  const [historyDateFrom, setHistoryDateFrom] = useState('');
+  const [historyDateTo, setHistoryDateTo] = useState('');
+  const [historyTypeFilter, setHistoryTypeFilter] = useState<XrayType | ''>('');
+
   const pendingCount = useMemo(() => requests.filter(r => r.status === 'pending').length, [requests]);
+
+  // フィルタリングされた履歴
+  const filteredHistory = useMemo(() => {
+    return requests.filter(r => {
+      if (r.status !== 'completed') return false;
+
+      // テキスト検索（患者名 or ID）
+      if (historySearchText) {
+        const searchLower = historySearchText.toLowerCase();
+        const matchName = r.patientName.toLowerCase().includes(searchLower);
+        const matchId = r.patientId.toLowerCase().includes(searchLower);
+        if (!matchName && !matchId) return false;
+      }
+
+      // 日付範囲
+      if (historyDateFrom && r.scheduledDate < historyDateFrom) return false;
+      if (historyDateTo && r.scheduledDate > historyDateTo) return false;
+
+      // 撮影種別
+      if (historyTypeFilter && !r.types.includes(historyTypeFilter)) return false;
+
+      return true;
+    });
+  }, [requests, historySearchText, historyDateFrom, historyDateTo, historyTypeFilter]);
 
   // Keep operators local for now
   useEffect(() => {
@@ -393,8 +423,71 @@ const App: React.FC = () => {
 
             {view === 'history' && (
               <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden animate-in fade-in">
-                <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                  <h2 className="text-xl font-black text-slate-800 flex items-center gap-3"><History className="text-blue-500" /> 撮影完了履歴</h2>
+                <div className="p-8 border-b border-slate-100 bg-slate-50/50 space-y-6">
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-xl font-black text-slate-800 flex items-center gap-3"><History className="text-blue-500" /> 撮影完了履歴</h2>
+                    <div className="text-sm font-bold text-slate-400">{filteredHistory.length} 件</div>
+                  </div>
+                  {/* 検索フィルタ */}
+                  <div className="flex flex-wrap gap-4 items-end">
+                    <div className="flex-1 min-w-[200px]">
+                      <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">患者名 / ID</label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                        <input
+                          type="text"
+                          placeholder="検索..."
+                          value={historySearchText}
+                          onChange={e => setHistorySearchText(e.target.value)}
+                          className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="min-w-[150px]">
+                      <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">開始日</label>
+                      <input
+                        type="date"
+                        value={historyDateFrom}
+                        onChange={e => setHistoryDateFrom(e.target.value)}
+                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="min-w-[150px]">
+                      <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">終了日</label>
+                      <input
+                        type="date"
+                        value={historyDateTo}
+                        onChange={e => setHistoryDateTo(e.target.value)}
+                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="min-w-[150px]">
+                      <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">撮影種別</label>
+                      <select
+                        value={historyTypeFilter}
+                        onChange={e => setHistoryTypeFilter(e.target.value as XrayType | '')}
+                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">すべて</option>
+                        {(Object.keys(XRAY_LABELS) as XrayType[]).map(type => (
+                          <option key={type} value={type}>{XRAY_LABELS[type]}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {(historySearchText || historyDateFrom || historyDateTo || historyTypeFilter) && (
+                      <button
+                        onClick={() => {
+                          setHistorySearchText('');
+                          setHistoryDateFrom('');
+                          setHistoryDateTo('');
+                          setHistoryTypeFilter('');
+                        }}
+                        className="px-4 py-3 bg-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-300 transition-colors"
+                      >
+                        クリア
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
@@ -408,7 +501,7 @@ const App: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {requests.filter(r => r.status === 'completed').map(r => (
+                      {filteredHistory.map(r => (
                         <tr key={r.id} className="hover:bg-blue-50/20 transition-colors">
                           <td className="px-8 py-5">
                             <div className="font-bold text-slate-700">{r.scheduledDate}</div>
