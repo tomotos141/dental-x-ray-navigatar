@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   PlusCircle, LayoutDashboard, History, User, FileText, Save, Trash2, ListTodo,
   MapPin, X, Zap, Search, ClipboardCheck, Users, Settings, UserPlus, Info,
-  Cake, UserRound, ArrowRight, ArrowLeft, CheckCircle2, Database, Calendar as CalendarIcon, AlertTriangle, Filter, Download, Printer
+  Cake, UserRound, ArrowRight, ArrowLeft, CheckCircle2, Database, Calendar as CalendarIcon, AlertTriangle, Filter, Download, Printer, LogOut
 } from 'lucide-react';
 import { XrayRequest, XrayType, RadiationLog, ClinicAuth, Patient, Operator, StaffRole, Gender, BodyType, AgeCategory } from './types';
 import { INSURANCE_POINTS, XRAY_LABELS, LOCATION_OPTIONS, EXPOSURE_TEMPLATES } from './constants';
@@ -25,8 +25,18 @@ const calculateAge = (birthdayStr: string, baseDateStr: string = new Date().toIS
 
 const getAgeCategory = (age: number): AgeCategory => age < 12 ? 'child' : 'adult';
 
+const AUTH_STORAGE_KEY = 'dentx_auth';
+
 const App: React.FC = () => {
-  const [auth, setAuth] = useState<ClinicAuth | null>(null);
+  // セッション永続化: localStorageから初期値を読み込み
+  const [auth, setAuth] = useState<ClinicAuth | null>(() => {
+    try {
+      const saved = localStorage.getItem(AUTH_STORAGE_KEY);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [view, setView] = useState<'request' | 'tasks' | 'stats' | 'history' | 'patients' | 'patient-detail'>('request');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const { patients, requests, loading, savePatient, deletePatient: deletePatientDb, addRequest, updateRequest } = useDentalData();
@@ -34,6 +44,21 @@ const App: React.FC = () => {
 
   const [loginClinicId, setLoginClinicId] = useState('');
   const [loginStaffName, setLoginStaffName] = useState('');
+
+  // 認証状態が変わったらlocalStorageに保存
+  useEffect(() => {
+    if (auth) {
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth));
+    } else {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+    }
+  }, [auth]);
+
+  // ログアウト
+  const handleLogout = () => {
+    setAuth(null);
+    setView('request');
+  };
   const [logModalTask, setLogModalTask] = useState<XrayRequest | null>(null);
   const [tempLogs, setTempLogs] = useState<Partial<Record<XrayType, RadiationLog>>>({});
 
@@ -260,13 +285,24 @@ const App: React.FC = () => {
             <p className="text-[10px] text-blue-500 font-black mt-1 uppercase tracking-tighter">{auth?.staffName || 'Guest'} さん</p>
           </div>
         </div>
-        <nav className="flex gap-1 bg-slate-100 p-1 rounded-2xl overflow-x-auto no-scrollbar">
-          <button onClick={() => setView('request')} className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 ${view === 'request' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><PlusCircle size={14} /><span>新規依頼</span></button>
-          <button onClick={() => setView('tasks')} className={`px-4 py-2 rounded-xl text-xs font-bold relative ${view === 'tasks' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><ListTodo size={14} /><span>タスク</span>{pendingCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-black">{pendingCount}</span>}</button>
-          <button onClick={() => setView('stats')} className={`px-4 py-2 rounded-xl text-xs font-bold ${view === 'stats' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><LayoutDashboard size={14} /><span>実績</span></button>
-          <button onClick={() => setView('history')} className={`px-4 py-2 rounded-xl text-xs font-bold ${view === 'history' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><History size={14} /><span>履歴</span></button>
-          <button onClick={() => setView('patients')} className={`px-4 py-2 rounded-xl text-xs font-bold ${view === 'patients' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Users size={14} /><span>患者管理</span></button>
-        </nav>
+        <div className="flex items-center gap-4">
+          <nav className="flex gap-1 bg-slate-100 p-1 rounded-2xl overflow-x-auto no-scrollbar">
+            <button onClick={() => setView('request')} className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 ${view === 'request' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><PlusCircle size={14} /><span>新規依頼</span></button>
+            <button onClick={() => setView('tasks')} className={`px-4 py-2 rounded-xl text-xs font-bold relative ${view === 'tasks' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><ListTodo size={14} /><span>タスク</span>{pendingCount > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-black">{pendingCount}</span>}</button>
+            <button onClick={() => setView('stats')} className={`px-4 py-2 rounded-xl text-xs font-bold ${view === 'stats' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><LayoutDashboard size={14} /><span>実績</span></button>
+            <button onClick={() => setView('history')} className={`px-4 py-2 rounded-xl text-xs font-bold ${view === 'history' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><History size={14} /><span>履歴</span></button>
+            <button onClick={() => setView('patients')} className={`px-4 py-2 rounded-xl text-xs font-bold ${view === 'patients' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Users size={14} /><span>患者管理</span></button>
+          </nav>
+          {auth && (
+            <button
+              onClick={handleLogout}
+              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+              title="ログアウト"
+            >
+              <LogOut size={18} />
+            </button>
+          )}
+        </div>
       </header>
 
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-8">
