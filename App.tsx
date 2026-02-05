@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   PlusCircle, LayoutDashboard, History, User, FileText, Save, Trash2, ListTodo,
   MapPin, X, Zap, Search, ClipboardCheck, Users, Settings, UserPlus, Info,
-  Cake, UserRound, ArrowRight, ArrowLeft, CheckCircle2, Database, Calendar as CalendarIcon, AlertTriangle, Filter
+  Cake, UserRound, ArrowRight, ArrowLeft, CheckCircle2, Database, Calendar as CalendarIcon, AlertTriangle, Filter, Download, Printer
 } from 'lucide-react';
 import { XrayRequest, XrayType, RadiationLog, ClinicAuth, Patient, Operator, StaffRole, Gender, BodyType, AgeCategory } from './types';
 import { INSURANCE_POINTS, XRAY_LABELS, LOCATION_OPTIONS, EXPOSURE_TEMPLATES } from './constants';
@@ -187,6 +187,46 @@ const App: React.FC = () => {
     if (!deleteConfirmPatient) return;
     await deletePatientDb(deleteConfirmPatient.id);
     setDeleteConfirmPatient(null);
+  };
+
+  // CSV出力
+  const exportHistoryToCSV = () => {
+    const headers = ['日付', '時刻', '患者ID', '患者名', '年齢', '体格', '撮影種別', 'kV', 'mA', 'sec', '担当者', '点数'];
+    const rows = filteredHistory.map(r => {
+      const firstLog = (Object.values(r.radiationLogs) as RadiationLog[])[0];
+      return [
+        r.scheduledDate,
+        r.scheduledTime,
+        r.patientId,
+        r.patientName,
+        r.patientAgeAtRequest,
+        r.patientBodyType === 'small' ? '小柄' : r.patientBodyType === 'normal' ? '普通' : '大柄',
+        r.types.map(t => XRAY_LABELS[t]).join(' / '),
+        firstLog?.kv || '',
+        firstLog?.ma || '',
+        firstLog?.sec || '',
+        firstLog?.operatorName || '',
+        r.points
+      ];
+    });
+
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n');
+
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `照射録_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // 印刷
+  const printHistory = () => {
+    window.print();
   };
 
   const openLogModal = (task: XrayRequest) => {
@@ -426,7 +466,25 @@ const App: React.FC = () => {
                 <div className="p-8 border-b border-slate-100 bg-slate-50/50 space-y-6">
                   <div className="flex justify-between items-center">
                     <h2 className="text-xl font-black text-slate-800 flex items-center gap-3"><History className="text-blue-500" /> 撮影完了履歴</h2>
-                    <div className="text-sm font-bold text-slate-400">{filteredHistory.length} 件</div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-sm font-bold text-slate-400">{filteredHistory.length} 件</div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={exportHistoryToCSV}
+                          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-colors print:hidden"
+                        >
+                          <Download size={14} />
+                          CSV
+                        </button>
+                        <button
+                          onClick={printHistory}
+                          className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-xl text-xs font-bold hover:bg-slate-700 transition-colors print:hidden"
+                        >
+                          <Printer size={14} />
+                          印刷
+                        </button>
+                      </div>
+                    </div>
                   </div>
                   {/* 検索フィルタ */}
                   <div className="flex flex-wrap gap-4 items-end">

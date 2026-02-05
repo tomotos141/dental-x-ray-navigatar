@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
-import { LayoutDashboard, TrendingUp, Users, Calendar } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, Users, Calendar, Download, Printer } from 'lucide-react';
 import { XrayRequest, RadiationLog } from '../types';
 import { XRAY_LABELS } from '../constants';
 
@@ -104,6 +104,43 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ requests }) => {
 
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#6366f1', '#ec4899', '#8b5cf6'];
 
+  // CSV出力
+  const exportStatsToCSV = () => {
+    const lines: string[] = [];
+
+    // サマリー
+    lines.push('【集計サマリー】');
+    lines.push(`期間,${periodLabel}`);
+    lines.push(`完了依頼数,${stats.totalCount}`);
+    lines.push(`合計点数,${stats.totalPoints}`);
+    lines.push(`平均単価,${stats.totalCount > 0 ? Math.round(stats.totalPoints / stats.totalCount) : 0}`);
+    lines.push('');
+
+    // 撮影種別
+    lines.push('【撮影種別シェア】');
+    lines.push('種別,件数');
+    stats.typeData.forEach(d => lines.push(`${d.name},${d.count}`));
+    lines.push('');
+
+    // 担当者別
+    lines.push('【担当者別貢献度】');
+    lines.push('担当者,件数');
+    stats.operatorData.forEach(d => lines.push(`${d.name},${d.count}`));
+
+    const bom = '\uFEFF';
+    const blob = new Blob([bom + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `実績集計_${periodLabel.replace(/\s/g, '_')}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const printStats = () => {
+    window.print();
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-2">
@@ -152,11 +189,27 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ requests }) => {
         </div>
       </div>
 
-      {/* 期間ラベル */}
-      <div className="px-2">
+      {/* 期間ラベル + エクスポート */}
+      <div className="px-2 flex justify-between items-center">
         <div className="inline-flex items-center gap-2 bg-blue-50 text-blue-600 px-4 py-2 rounded-full text-sm font-bold">
           <Calendar size={16} />
           {periodLabel}
+        </div>
+        <div className="flex gap-2 print:hidden">
+          <button
+            onClick={exportStatsToCSV}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold hover:bg-emerald-700 transition-colors"
+          >
+            <Download size={14} />
+            CSV
+          </button>
+          <button
+            onClick={printStats}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-xl text-xs font-bold hover:bg-slate-700 transition-colors"
+          >
+            <Printer size={14} />
+            印刷
+          </button>
         </div>
       </div>
 
