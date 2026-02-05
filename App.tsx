@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   PlusCircle, LayoutDashboard, History, User, FileText, Save, Trash2, ListTodo,
   MapPin, X, Zap, Search, ClipboardCheck, Users, Settings, UserPlus, Info,
-  Cake, UserRound, ArrowRight, CheckCircle2, Database, Calendar as CalendarIcon, AlertTriangle
+  Cake, UserRound, ArrowRight, ArrowLeft, CheckCircle2, Database, Calendar as CalendarIcon, AlertTriangle
 } from 'lucide-react';
 import { XrayRequest, XrayType, RadiationLog, ClinicAuth, Patient, Operator, StaffRole, Gender, BodyType, AgeCategory } from './types';
 import { INSURANCE_POINTS, XRAY_LABELS, LOCATION_OPTIONS, EXPOSURE_TEMPLATES } from './constants';
@@ -27,7 +27,8 @@ const getAgeCategory = (age: number): AgeCategory => age < 12 ? 'child' : 'adult
 
 const App: React.FC = () => {
   const [auth, setAuth] = useState<ClinicAuth | null>(null);
-  const [view, setView] = useState<'request' | 'tasks' | 'stats' | 'history' | 'patients'>('request');
+  const [view, setView] = useState<'request' | 'tasks' | 'stats' | 'history' | 'patients' | 'patient-detail'>('request');
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const { patients, requests, loading, savePatient, deletePatient: deletePatientDb, addRequest, updateRequest } = useDentalData();
   const [operators, setOperators] = useState<Operator[]>([]);
 
@@ -465,7 +466,14 @@ const App: React.FC = () => {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {patients.map(p => (
-                        <tr key={p.id} className="hover:bg-slate-50 transition-colors group">
+                        <tr
+                          key={p.id}
+                          className="hover:bg-blue-50 transition-colors group cursor-pointer"
+                          onClick={() => {
+                            setSelectedPatient(p);
+                            setView('patient-detail');
+                          }}
+                        >
                           <td className="px-8 py-5 font-mono font-bold text-slate-500">{p.id}</td>
                           <td className="px-8 py-5 font-black text-slate-900">{p.name}</td>
                           <td className="px-8 py-5 font-bold text-slate-600">{p.birthday}</td>
@@ -476,7 +484,10 @@ const App: React.FC = () => {
                           </td>
                           <td className="px-8 py-5 text-right">
                             <button
-                              onClick={() => handleDeletePatient(p)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeletePatient(p);
+                              }}
                               className="p-2 text-slate-300 hover:text-red-500 transition-colors hover:bg-red-50 rounded-xl"
                             >
                               <Trash2 size={20} />
@@ -487,6 +498,161 @@ const App: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            )}
+
+            {view === 'patient-detail' && selectedPatient && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                {/* ヘッダー: 戻るボタン + 患者情報 */}
+                <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="p-8 border-b border-slate-100 bg-slate-50/50">
+                    <button
+                      onClick={() => setView('patients')}
+                      className="flex items-center gap-2 text-slate-500 hover:text-blue-600 transition-colors mb-6"
+                    >
+                      <ArrowLeft size={20} />
+                      <span className="font-bold text-sm">患者一覧に戻る</span>
+                    </button>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h2 className="text-3xl font-black text-slate-900">{selectedPatient.name}</h2>
+                        <p className="text-sm font-bold text-slate-400 mt-2">
+                          ID: <span className="font-mono">{selectedPatient.id}</span>
+                        </p>
+                      </div>
+                      <div className="flex gap-3">
+                        <div className="bg-slate-100 px-4 py-2 rounded-xl text-center">
+                          <div className="text-[10px] font-black text-slate-400 uppercase">生年月日</div>
+                          <div className="text-sm font-bold text-slate-700">{selectedPatient.birthday}</div>
+                        </div>
+                        <div className="bg-slate-100 px-4 py-2 rounded-xl text-center">
+                          <div className="text-[10px] font-black text-slate-400 uppercase">年齢</div>
+                          <div className="text-sm font-bold text-slate-700">{calculateAge(selectedPatient.birthday)}歳</div>
+                        </div>
+                        <div className="bg-slate-100 px-4 py-2 rounded-xl text-center">
+                          <div className="text-[10px] font-black text-slate-400 uppercase">性別</div>
+                          <div className="text-sm font-bold text-slate-700">{selectedPatient.gender === 'male' ? '男性' : '女性'}</div>
+                        </div>
+                        <div className={`px-4 py-2 rounded-xl text-center ${selectedPatient.bodyType === 'small' ? 'bg-emerald-100' : selectedPatient.bodyType === 'normal' ? 'bg-blue-100' : 'bg-amber-100'}`}>
+                          <div className="text-[10px] font-black text-slate-400 uppercase">体格</div>
+                          <div className={`text-sm font-bold ${selectedPatient.bodyType === 'small' ? 'text-emerald-700' : selectedPatient.bodyType === 'normal' ? 'text-blue-700' : 'text-amber-700'}`}>
+                            {selectedPatient.bodyType === 'small' ? '小柄' : selectedPatient.bodyType === 'normal' ? '普通' : '大柄'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 撮影履歴 */}
+                <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="p-8 border-b border-slate-100 bg-slate-50/50">
+                    <h3 className="text-xl font-black text-slate-800 flex items-center gap-3">
+                      <History className="text-blue-500" /> 撮影履歴
+                    </h3>
+                  </div>
+                  {requests.filter(r => r.patientId === selectedPatient.id && r.status === 'completed').length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                          <tr>
+                            <th className="px-8 py-6">日時</th>
+                            <th className="px-8 py-6">撮影項目</th>
+                            <th className="px-8 py-6">照射条件 (kV/mA/sec)</th>
+                            <th className="px-8 py-6">担当者</th>
+                            <th className="px-8 py-6 text-right">保険点数</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {requests
+                            .filter(r => r.patientId === selectedPatient.id && r.status === 'completed')
+                            .map(r => (
+                              <tr key={r.id} className="hover:bg-blue-50/20 transition-colors">
+                                <td className="px-8 py-5">
+                                  <div className="font-bold text-slate-700">{r.scheduledDate}</div>
+                                  <div className="text-xs text-slate-400">{r.scheduledTime}</div>
+                                </td>
+                                <td className="px-8 py-5">
+                                  <div className="flex flex-wrap gap-1">
+                                    {r.types.map(t => (
+                                      <span key={t} className="text-[10px] font-black bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200">
+                                        {XRAY_LABELS[t]}
+                                        {t === 'BITEWING' && r.bitewingSides && ` (${r.bitewingSides.map(s => s === 'right' ? '右' : '左').join('・')})`}
+                                      </span>
+                                    ))}
+                                  </div>
+                                  {r.selectedTeeth.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-2">
+                                      {r.selectedTeeth.sort((a, b) => a - b).map(t => (
+                                        <span key={t} className="text-[8px] font-bold text-slate-400 px-1.5 py-0.5 bg-slate-50 rounded">
+                                          {t}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="px-8 py-5">
+                                  <div className="space-y-1">
+                                    {(Object.entries(r.radiationLogs) as [string, RadiationLog][]).map(([type, log]) => (
+                                      <div key={type} className="flex items-center gap-2 text-[10px] font-bold text-blue-600 bg-blue-50/50 px-2 py-1 rounded border border-blue-50">
+                                        <span className="text-slate-400 w-16 truncate">{XRAY_LABELS[type as XrayType]}:</span>
+                                        <span>{log.kv}kV</span> / <span>{log.ma}mA</span> / <span>{log.sec}s</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </td>
+                                <td className="px-8 py-5">
+                                  <span className="text-sm font-bold text-slate-600">
+                                    {(Object.values(r.radiationLogs) as RadiationLog[])[0]?.operatorName || '-'}
+                                  </span>
+                                </td>
+                                <td className="px-8 py-5 text-right font-black text-slate-900 tabular-nums">{r.points.toLocaleString()}</td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="p-12 text-center">
+                      <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <History className="text-slate-300" size={32} />
+                      </div>
+                      <p className="text-slate-400 font-bold text-sm">撮影履歴がありません</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* 予定中タスク */}
+                {requests.filter(r => r.patientId === selectedPatient.id && r.status === 'pending').length > 0 && (
+                  <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-8 border-b border-slate-100 bg-amber-50/50">
+                      <h3 className="text-xl font-black text-slate-800 flex items-center gap-3">
+                        <ListTodo className="text-amber-500" /> 予定中のタスク
+                      </h3>
+                    </div>
+                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {requests
+                        .filter(r => r.patientId === selectedPatient.id && r.status === 'pending')
+                        .map(task => (
+                          <div key={task.id} className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                            <div className="flex justify-between items-start mb-3">
+                              <div className="bg-amber-600 text-white px-3 py-1 rounded-lg text-sm font-black">
+                                {task.scheduledTime}
+                              </div>
+                              <div className="text-xs font-bold text-amber-600">{task.scheduledDate}</div>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {task.types.map(t => (
+                                <span key={t} className="text-[10px] font-black bg-white text-amber-700 px-2 py-1 rounded border border-amber-200">
+                                  {XRAY_LABELS[t]}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
