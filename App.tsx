@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { nanoid } from 'nanoid';
 import {
   PlusCircle, LayoutDashboard, History, User, FileText, Save, Trash2, ListTodo,
   MapPin, X, Zap, Search, ClipboardCheck, Users, Settings, UserPlus, Info,
@@ -185,7 +186,7 @@ const App: React.FC = () => {
     });
 
     const requestData: XrayRequest = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: nanoid(),
       patientName, patientId, patientGender, patientBirthday, patientAgeAtRequest: currentAge, patientBodyType,
       types: selectedXrayTypes, selectedTeeth, bitewingSides: selectedXrayTypes.includes('BITEWING') ? bitewingSides : undefined,
       notes, locationFrom: '診察室', locationTo, scheduledDate, scheduledTime, points: currentPoints,
