@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   PlusCircle, LayoutDashboard, History, User, FileText, Save, Trash2, ListTodo,
   MapPin, X, Zap, Search, ClipboardCheck, Users, Settings, UserPlus, Info,
-  Cake, UserRound, ArrowRight, ArrowLeft, CheckCircle2, Database, Calendar as CalendarIcon, AlertTriangle, Filter, Download, Printer, LogOut, XCircle, CheckCircle
+  Cake, UserRound, ArrowRight, ArrowLeft, CheckCircle2, Database, Calendar as CalendarIcon, AlertTriangle, Filter, Download, Printer, LogOut, XCircle, CheckCircle, Loader2
 } from 'lucide-react';
 import { XrayRequest, XrayType, RadiationLog, ClinicAuth, Patient, Operator, StaffRole, Gender, BodyType, AgeCategory } from './types';
 import { INSURANCE_POINTS, XRAY_LABELS, LOCATION_OPTIONS, EXPOSURE_TEMPLATES } from './constants';
@@ -318,6 +318,11 @@ const App: React.FC = () => {
               <input type="text" placeholder="スタッフ名" value={loginStaffName} onChange={e => setLoginStaffName(e.target.value)} className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold focus:ring-2 focus:ring-blue-500" />
               <button onClick={() => setAuth({ clinicId: loginClinicId, staffName: loginStaffName })} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black shadow-xl shadow-blue-100 transition-transform active:scale-95">ログイン</button>
             </div>
+          </div>
+        ) : loading ? (
+          <div className="flex flex-col items-center justify-center py-32 animate-in fade-in duration-500">
+            <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
+            <p className="text-slate-500 font-bold text-sm">データを読み込み中...</p>
           </div>
         ) : (
           <>
